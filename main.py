@@ -1,6 +1,5 @@
 import multiprocessing
 
-import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
@@ -20,15 +19,15 @@ def get_random_shape(state: State):
     # generate 1000 random shape and return the best one
     h, w = state.origin_image.shape[:2]
     best_shape = None
-    best_loss = None
+    best_loss = float("inf")
 
-    for i in range(1000):
+    for _ in range(1000):
         shape = Triangle.get_random(h, w)
         color = state.extract_color(shape)
         noise_image = state.add(shape, color)
 
         loss = loss_func(noise_image, state.origin_image)
-        if i == 0 or loss < best_loss:
+        if loss < best_loss:
             best_loss = loss
             best_shape = shape
 
@@ -43,37 +42,26 @@ def hillclimb(state: State, shape: Shape):
     best_loss = loss_func(noise_image, state.origin_image)
 
     # loop for 100 times
-    age, max_age = 0, 100
-    loop = 0
-    while age < max_age:
-        copy = shape.copy()
-
+    for _ in range(100):
+        original_shape = shape.copy()
         shape.mutate()
+
         color = state.extract_color(shape)
-        noise_image = state.add(shape, color)
+        noise_image = state.add(shape, color=color)
         loss = loss_func(noise_image, state.origin_image)
 
         if loss < best_loss:
             best_shape = shape
             best_loss = loss
-            age = -1
         else:
-            shape = copy
+            shape = original_shape
 
-        age += 1
-        loop += 1
-
-    return best_shape
+    return best_shape, best_loss
 
 
 def optimize_shape(state: State):
-    # before
     shape = get_random_shape(state)
-    shape = hillclimb(state, shape)
-
-    color = state.extract_color(shape)
-    noise_image = state.add(shape, color)
-    shape_loss = loss_func(noise_image, state.origin_image)
+    shape, shape_loss = hillclimb(state, shape)
     return shape, shape_loss
 
 
@@ -135,8 +123,6 @@ def main():
         shape = step(state)
         color = state.extract_color(shape)
         state.add(shape, color, in_place=True)
-
-        plt.imsave(f"output/{i:03}.jpg", state.noise_image)
 
         # draw.polygon(
         #     [(shape.x1, shape.y1), (shape.x2, shape.y2), (shape.x3, shape.y3)],

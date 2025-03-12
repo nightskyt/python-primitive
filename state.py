@@ -1,5 +1,6 @@
-from shapes.shape import Shape
 import numpy as np
+
+from shapes.shape import Shape
 
 
 class State:
@@ -15,7 +16,7 @@ class State:
         color = tuple(np.mean(self.origin_image, axis=(0, 1)).astype(int))
         self.noise_image = np.full_like(self.origin_image, color)
 
-    def add(self, shape: Shape, color=None, in_place: bool=False) -> np.ndarray:
+    def add(self, shape: Shape, color=None, in_place: bool = False) -> np.ndarray:
         mask = shape.mask()
         if in_place:
             self.noise_image[mask] = color
@@ -25,9 +26,11 @@ class State:
         new_image[mask] = color
         return new_image
 
-    def extract_color(self, shape: Shape) -> tuple[int, int, int]:
+    def extract_color(self, shape: Shape, alpha: float = 0.5) -> tuple[int, int, int]:
         mask = shape.mask()
         if self.origin_image[mask].size == 0:
             return tuple(np.zeros(3).astype(int))
         color = np.mean(self.origin_image[mask], axis=(0,)).astype(int)
-        return tuple(color)
+        color = alpha * color + (1 - alpha) * self.noise_image[mask]
+        color = tuple(np.clip(color, 0, 255).astype(int))
+        return color
