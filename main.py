@@ -1,4 +1,6 @@
+import argparse
 import multiprocessing
+import os
 
 import numpy as np
 from PIL import Image
@@ -10,13 +12,11 @@ from state import State
 
 
 def loss_func(noise_img, target_img):
-    # 计算图之间的距离
     dist = np.sum((noise_img - target_img) ** 2)
     return np.sqrt(dist / noise_img.size)
 
 
 def get_random_shape(state: State):
-    # generate 1000 random shape and return the best one
     h, w = state.origin_image.shape[:2]
     best_shape = None
     best_loss = float("inf")
@@ -35,13 +35,9 @@ def get_random_shape(state: State):
 
 
 def hillclimb(state: State, shape: Shape):
-    color = state.extract_color(shape)
-    noise_image = state.add(shape, color)
-
     best_shape = shape
-    best_loss = loss_func(noise_image, state.origin_image)
+    best_loss = float("inf")
 
-    # loop for 100 times
     for _ in range(100):
         original_shape = shape.copy()
         shape.mutate()
@@ -65,12 +61,12 @@ def optimize_shape(state: State):
     return shape, shape_loss
 
 
-def collect_optimized_shape(state, number_of_process=16):
+def collect_optimized_shape(args, state):
     best_shape = None
     best_loss = None
 
-    with multiprocessing.Pool(processes=number_of_process) as pool:
-        results = pool.starmap(optimize_shape, [(state,)] * number_of_process)
+    with multiprocessing.Pool(processes=args.processes) as pool:
+        results = pool.starmap(optimize_shape, [(state,)] * args.processes)
 
     for shape, shape_loss in results:
         if best_shape is None or shape_loss < best_loss:
@@ -80,8 +76,8 @@ def collect_optimized_shape(state, number_of_process=16):
     return best_shape
 
 
-def step(state) -> Shape:
-    shape = collect_optimized_shape(state)
+def step(args, state) -> Shape:
+    shape = collect_optimized_shape(args, state)
     return shape
 
 
@@ -98,44 +94,33 @@ def perprocess(image: Image.Image, size: tuple[int, int]) -> Image.Image:
 
 
 def main():
-    # 读取图片
-    image_path = "examples/person.jpg"
-    # image_path = "examples/swan.jpg"
-    # image_path = "examples/monalisa.png"
-    image = Image.open(image_path)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-i", "--image", type=str, default="")
+    parser.add_argument("-o", "--output", type=str, default="output.jpg")
+    parser.add_argument("-n", type=int, default=50)
+    parser.add_argument("-p", "--processes", type=int, default=os.cpu_count())
+
+    args = parser.parse_args()
+
+    image = Image.open(args.image)
     image = image.convert("RGB")
 
     origin_height, origin_width = image.size
     height, width = 256, 256
     image = perprocess(image, (height, width))
 
-    # 将图像数据转换为NumPy数组
     image_array = np.array(image)
     state = State(image_array)
 
-    # color = tuple(np.mean(image_array, axis=(0, 1)).astype(int))
-    # canvas = Image.new("RGBA", (height, width), (color[0], color[1], color[2], 255))
-    # draw = ImageDraw.Draw(canvas)
-
-    # 图形数量
-    n = 100
-    for i in tqdm(range(n)):
-        shape = step(state)
+    n = args.n
+    for _ in tqdm(range(n)):
+        shape = step(args, state)
         color = state.extract_color(shape)
         state.add(shape, color, in_place=True)
 
-        # draw.polygon(
-        #     [(shape.x1, shape.y1), (shape.x2, shape.y2), (shape.x3, shape.y3)],
-        #     fill=(color[0], color[1], color[2], 128),
-        # )
-
     output = Image.fromarray(state.noise_image)
-    # # output = output.resize((origin_height, origin_width), Image.Resampling.BICUBIC)
-    output.save("result.png")
-
-    # # 显示画布
-    # canvas.show()
-    # canvas.save("output.png")
+    output = output.resize((origin_height, origin_width), Image.Resampling.BICUBIC)
+    output.save(args.output)
 
 
 if __name__ == "__main__":
